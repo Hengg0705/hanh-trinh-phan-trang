@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hành Trình Phấn Trắng: Sư Phạm Văn</title>
+<style>
+*{box-sizing:border-box}body{margin:0;overflow:hidden;background:#07101c;color:#f4f7fb;font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif}
+#game{position:fixed;inset:0}canvas{display:block}.ui{position:fixed;background:rgba(7,16,29,.88);border:1px solid #35516b;backdrop-filter:blur(10px);border-radius:15px;box-shadow:0 10px 35px #0007}
+#top{left:14px;top:14px;width:320px;padding:13px}#right{right:14px;top:14px;width:320px;padding:13px}#bottom{left:14px;bottom:14px;width:min(520px,calc(100% - 28px));padding:10px;font-size:12px;line-height:1.45}
+h1{font-size:19px;margin:0 0 3px}.small{font-size:12px;color:#a9bfd2}.row{display:grid;grid-template-columns:25px 1fr 35px;gap:6px;align-items:center;margin:7px 0}.bar{height:7px;background:#1a2a3a;border-radius:99px;overflow:hidden}.fill{height:100%;background:#76c9f4}.btn{display:block;width:100%;border:0;border-radius:9px;padding:9px;margin:5px 0;background:#205d83;color:#fff;font-weight:700;cursor:pointer}.btn:hover{background:#2d769f}.quest{padding:8px;background:#112338;border-radius:9px;margin:8px 0;font-size:12px}.tag{display:inline-block;padding:2px 7px;border-radius:99px;background:#274e68;font-size:11px;margin:2px}
+#dialog,#start,#question{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:#0009;padding:18px;z-index:20}.card{width:min(720px,95vw);max-height:90vh;overflow:auto;background:#0a1828;border:1px solid #41617b;border-radius:18px;padding:23px}.card h2{margin-top:0}.choice{text-align:left;background:#152b40}.choice:hover{background:#235170}.ok{color:#7fe1a2}.bad{color:#ff9c9c}
+#start{display:flex;background:radial-gradient(circle at 50% 35%,#174e70,#06101d 70%)}.startbox{text-align:center;width:min(720px,94vw)}.startbox h1{font-size:38px}.startbox p{line-height:1.65;color:#b7cce0}kbd{background:#182d43;border:1px solid #38546b;border-radius:5px;padding:2px 6px}
+@media(max-width:700px){#right{width:240px}#top{width:260px}.startbox h1{font-size:28px}}
+</style>
+</head>
+<body>
+<div id="game"></div>
+<div id="start"><div class="ui card startbox">
+<div style="font-size:55px">🎓📚</div><h1>HÀNH TRÌNH PHẤN TRẮNG</h1>
+<div class="small">SƯ PHẠM NGỮ VĂN • 3D RPG / VISUAL NOVEL</div>
+<p>Trải qua 4 năm đại học, học Văn, tập giảng, xây dựng quan hệ với giảng viên và bạn học, hoàn thành 12 tuần thực tập sư phạm, bảo vệ khóa luận và nhận bằng.</p>
+<button class="btn" onclick="newGame()">BẮT ĐẦU HÀNH TRÌNH</button>
+<button class="btn" onclick="loadGame()">TIẾP TỤC TIẾN TRÌNH</button>
+<p style="font-size:12px">Di chuyển <kbd>WASD</kbd>/<kbd>↑↓←→</kbd> • Tương tác <kbd>E</kbd> • Lưu tự động sau hoạt động</p>
+</div></div>
+
+<div id="top" class="ui">
+<h1>🎓 Hành Trình Phấn Trắng</h1><div id="period" class="small"></div>
+<div class="row"><b>📚</b><div>Chuyên môn Văn<div class="bar"><div id="bc" class="fill"></div></div></div><b id="C"></b></div>
+<div class="row"><b>🎤</b><div>Kỹ năng Sư phạm<div class="bar"><div id="bs" class="fill"></div></div></div><b id="S"></b></div>
+<div class="row"><b>🤝</b><div>Đạo đức nghề<div class="bar"><div id="bd" class="fill"></div></div></div><b id="D"></b></div>
+<div class="row"><b>⚡</b><div>Năng lượng<div class="bar"><div id="be" class="fill"></div></div></div><b id="E"></b></div>
+<div><span class="tag">GPA <b id="GPA"></b></span><span class="tag">Tuần TT <b id="week"></b></span></div>
+</div>
+
+<div id="right" class="ui"><b>📜 NHIỆM VỤ</b><div id="quests"></div>
+<button class="btn" onclick="saveGame()">💾 Lưu tiến trình</button>
+<button class="btn" onclick="openMap()">🗺️ Xem bản đồ / điểm đến</button>
+</div>
+<div id="bottom" class="ui"><b>💬 Nhật ký</b><div id="log"></div></div>
+
+<div id="dialog"><div class="card" id="dialogCard"></div></div>
+<div id="question"><div class="card" id="questionCard"></div></div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script>
+const SAVE='htpt_save_v2';
+let scene,camera,renderer,clock,player,started=false,keys={},near='',lastAction=0;
+let st={semester:1,week:0,C:45,S:30,D:50,E:85,gpa:0,credits:0,quests:{},friend:0,mentor:0,graduated:false,quizIndex:0};
+const logs=[]; const $=x=>document.getElementById(x); const clamp=(v,a=0,b=100)=>Math.max(a,Math.min(b,v));
+const quests=[
+['q1','Nhập môn','Đọc tài liệu và trả lời 3 câu hỏi Văn học','quiz',3],
+['q2','Tập giảng','Tập giảng với bạn cùng lớp','teach',2],
+['q3','Cố vấn','Nói chuyện với giảng viên hướng dẫn','mentor',1],
+['q4','Thực tập','Hoàn thành 12 tuần thực tập sư phạm','intern',12],
+['q5','Khóa luận','Vượt qua buổi bảo vệ khóa luận','thesis',1]
+];
+const quizBank=[
+['“Truyện Kiều” của Nguyễn Du được viết chủ yếu bằng thể thơ nào?',['Lục bát','Thất ngôn bát cú','Song thất lục bát','Tự do'],0,5],
+['Đặc điểm nổi bật của văn học dân gian là gì?',['Tính truyền miệng và tập thể','Chỉ lưu truyền bằng sách','Chỉ có tác giả cá nhân','Không có dị bản'],0,5],
+['Trong “Chí Phèo”, tiếng chửi mở đầu góp phần thể hiện điều gì?',['Bi kịch bị cự tuyệt quyền làm người','Niềm vui lễ hội','Tình yêu đôi lứa','Cuộc sống giàu sang'],0,6],
+['“Vợ nhặt” của Kim Lân đặt nhân vật trong bối cảnh lịch sử nào?',['Nạn đói 1945','Kháng chiến chống Pháp 1954','Đổi mới 1986','Thời Lý'],0,5],
+['Biện pháp tu từ so sánh thường có tác dụng gì?',['Làm nổi bật đặc điểm qua đối chiếu','Chỉ để kéo dài câu','Xóa hình ảnh','Không tạo hiệu quả'],0,4],
+['Mục tiêu của dạy học phát triển năng lực là gì?',['Học sinh vận dụng kiến thức để giải quyết nhiệm vụ','Học thuộc càng nhiều càng tốt','Giáo viên nói toàn bộ tiết học','Chỉ chấm điểm cuối kỳ'],0,6],
+['“Đất Nước” của Nguyễn Khoa Điềm nhấn mạnh cách nhìn nào?',['Đất Nước của Nhân dân','Đất Nước chỉ của vua','Đất Nước chỉ là địa lý','Đất Nước không liên quan con người'],0,5],
+['Một giáo án tốt nên có chuỗi hoạt động nào?',['Khởi động–Hình thành–Luyện tập–Vận dụng','Chép bài–đọc đáp án','Thi ngay–hết giờ','Chỉ thuyết trình'],0,6],
+['Khi học sinh đặt câu hỏi khó, giáo viên nên làm gì?',['Bình tĩnh, ghi nhận và cùng kiểm chứng câu trả lời','Gạt đi vì mất thời gian','Mắng học sinh','Cho điểm 0'],0,6],
+['Đạo đức nghề giáo thể hiện rõ qua điều nào?',['Công bằng, tôn trọng và trách nhiệm với người học','Thiên vị học sinh giỏi','Làm nhục học sinh','Bỏ mặc lớp'],0,6]
+];
+function log(t){logs.unshift(t);$('log').innerHTML=logs.slice(0,7).map(x=>'• '+x).join('<br>')}
+function newGame(){localStorage.removeItem(SAVE);st={semester:1,week:0,C:45,S:30,D:50,E:85,gpa:0,credits:0,quests:{},friend:0,mentor:0,graduated:false,quizIndex:0};$('start').style.display='none';init();log('Bạn vừa nhập học ngành Sư phạm Ngữ văn.');saveGame()}
+function loadGame(){let x=localStorage.getItem(SAVE);if(!x)return alert('Chưa có tiến trình lưu.');st=JSON.parse(x);$('start').style.display='none';init();log('Đã tải tiến trình của bạn.')}
+function init(){
+scene=new THREE.Scene();scene.background=new THREE.Color(0x9ccbe6);scene.fog=new THREE.Fog(0x9ccbe6,45,130);
+camera=new THREE.PerspectiveCamera(58,innerWidth/innerHeight,.1,300);camera.position.set(0,9,15);
+renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setSize(innerWidth,innerHeight);renderer.shadowMap.enabled=true;$('game').appendChild(renderer.domElement);clock=new THREE.Clock();
+scene.add(new THREE.HemisphereLight(0xe8f7ff,0x34504b,2.1));let sun=new THREE.DirectionalLight(0xffffff,2.5);sun.position.set(30,40,15);sun.castShadow=true;scene.add(sun);
+world();makePlayer();makeNPCs();update();started=true;animate()
+}
+function M(c){return new THREE.MeshStandardMaterial({color:c,roughness:.72})}
+function cube(w,h,d,c,x,y,z){let o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),M(c));o.position.set(x,y,z);o.castShadow=o.receiveShadow=true;scene.add(o);return o}
+function cyl(r,h,c,x,y,z){let o=new THREE.Mesh(new THREE.CylinderGeometry(r,r*.85,h,12),M(c));o.position.set(x,y,z);o.castShadow=true;scene.add(o);return o}
+function text(t,x,y,z,scale=1){let cv=document.createElement('canvas');cv.width=600;cv.height=100;let ct=cv.getContext('2d');ct.fillStyle='rgba(7,20,32,.88)';ct.fillRect(0,0,600,100);ct.fillStyle='white';ct.font='bold 38px sans-serif';ct.textAlign='center';ct.fillText(t,300,64);let sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(cv),transparent:true}));sp.scale.set(8*scale,1.35*scale,1);sp.position.set(x,y,z);scene.add(sp)}
+function world(){
+cube(120,1,120,0x4e8957,0,-.5,0);cube(40,.5,8,0x9c805e,0,.1,5);
+cube(22,10,15,0xe9eef3,-28,5,-20);text('THƯ VIỆN',-28,11,-20);
+cube(25,9,14,0xe6c783,24,4.5,-20);text('KHOA NGỮ VĂN',24,10,-20);
+cube(30,11,15,0xc9d4dc,23,5.5,22);text('GIẢNG ĐƯỜNG',23,12,22);
+cube(24,8,14,0xd9a2a2,-28,4,22);text('THỰC TẬP SƯ PHẠM',-28,9,22);
+for(let x=-48;x<=48;x+=12){cyl(1.2,8,0x6b4b32,x,4,-3);cyl(4,1.5,0x3f8b4a,x,8,-3)}
+}
+function makePlayer(){
+let g=new THREE.Group();let body=new THREE.Mesh(new THREE.CapsuleGeometry(.55,1.25,6,12),M(0x2e5e87));body.position.y=1.35;g.add(body);
+let head=new THREE.Mesh(new THREE.SphereGeometry(.47,20,16),M(0xf0c6a5));head.position.y=2.35;g.add(head);
+let hair=new THREE.Mesh(new THREE.SphereGeometry(.49,20,10,0,Math.PI*2,0,Math.PI*.55),M(0x2a201b));hair.position.y=2.48;g.add(hair);
+let bag=cube(.55,.9,.3,0x6d4b30,.48,1.15,.2);g.add(bag);bag.position.set(.5,1.2,.2);
+g.position.set(0,0,0);player=g;scene.add(g)
+}
+function npc(name,x,z,color,role){
+let g=new THREE.Group();let b=new THREE.Mesh(new THREE.CapsuleGeometry(.48,1.15,6,12),M(color));b.position.y=1.2;g.add(b);
+let h=new THREE.Mesh(new THREE.SphereGeometry(.43,18,14),M(0xf0c4a1));h.position.y=2.15;g.add(h);
+let hair=new THREE.Mesh(new THREE.SphereGeometry(.45,18,10,0,Math.PI*2,0,Math.PI*.5),M(0x2a211d));hair.position.y=2.3;g.add(hair);
+g.position.set(x,0,z);scene.add(g);text(role,x,3.2,z,.55);g.userData={name,role};return g
+}
+function makeNPCs(){window.npcs=[npc('Cô Lan',-25,-14,0x633c82,'Giảng viên'),npc('Minh',-15,0,0x2f7e67,'Sinh viên'),npc('Mai',15,-2,0xa65a5a,'Sinh viên'),npc('Thầy Hùng',-25,15,0x4a688f,'GV hướng dẫn')]}
+function update(){
+$('period').textContent=st.semester<=6?'ĐẠI HỌC • HỌC KỲ '+st.semester+'/8':st.semester===7?'THỰC TẬP • TUẦN '+st.week+'/12':'TỐT NGHIỆP • HỌC KỲ 8';
+for(let [k,v] of Object.entries({C:st.C,S:st.S,D:st.D,E:st.E})){$(k).textContent=Math.round(v);$('b'+k.toLowerCase()).style.width=clamp(v)+'%'}
+$('GPA').textContent=st.gpa.toFixed(2);$('week').textContent=st.semester===7?st.week+'/12':'—';
+$('quests').innerHTML=quests.map(q=>{let done=!!st.quests[q[0]];return `<div class="quest"><b>${done?'✅':'⬜'} ${q[1]}</b><br>${q[2]}</div>`}).join('');
+}
+function saveGame(){localStorage.setItem(SAVE,JSON.stringify(st));log('💾 Đã lưu tiến trình trên thiết bị.');update()}
+function spend(n){if(st.E<n){log('Bạn đang cạn năng lượng. Hãy nghỉ ở sân trường.');return false}st.E-=n;return true}
+function nearby(){
+let p=player.position,best=null,dist=99;for(let n of npcs){let d=Math.hypot(p.x-n.position.x,p.z-n.position.z);if(d<dist){dist=d;best=n}}
+if(dist<5)return best;return null
+}
+function interact(){
+let n=nearby();if(n){dialog(n.userData);return}
+let p=player.position;if(Math.hypot(p.x+28,p.z+20)<9){quiz()}else if(Math.hypot(p.x-28,p.z-20)<9){if(st.semester===7)internWeek();else teach()}else if(Math.hypot(p.x-24,p.z-20)<10){if(st.semester>=8)thesis();else study()}else if(Math.hypot(p.x+28,p.z-22)<10){if(st.semester===7)internWeek();else rest()}else if(Math.hypot(p.x,p.z-5)<8){rest()}else log('Hãy đi tới umbral/điểm tương tác gần nhất.')}
+function dialog(n){
+if(n.name==='Cô Lan'){showDialog(`<h2>👩‍🏫 ${n.name} — Giảng viên</h2><p>“Em học Văn không chỉ để nhớ tác giả, tác phẩm. Em phải học cách giúp học sinh tự đọc và tự nghĩ.”</p><button class="btn" onclick="mentorTalk()">Hỏi về phương pháp dạy Văn</button><button class="btn" onclick="closeDialog()">Cảm ơn cô</button>`)}
+else if(n.name==='Thầy Hùng'){showDialog(`<h2>👨‍🏫 ${n.name} — GV hướng dẫn</h2><p>“Thực tập là lúc em biến lý thuyết thành hành động. Đừng sợ những tiết dạy chưa hoàn hảo.”</p><button class="btn" onclick="closeDialog();if(st.semester===7)internWeek()">Bắt đầu nhiệm vụ thực tập</button>`)}
+else {showDialog(`<h2>🧑‍🎓 ${n.name} — Sinh viên</h2><p>“Tập giảng chung nhé! Cậu thử làm người dạy, mình đóng vai học sinh.”</p><button class="btn" onclick="closeDialog();teach()">Tập giảng cùng bạn</button>`)}
+}
+function mentorTalk(){closeDialog();st.mentor++;st.S=clamp(st.S+4);st.D=clamp(st.D+3);log('Cô Lan chia sẻ một mẹo sư phạm. S +4, D +3');st.quests.q3=1;saveGame()}
+function study(){if(!spend(12))return;st.C=clamp(st.C+5);st.gpa=Math.min(4,st.gpa+.08);log('Bạn học tại thư viện. C +5, GPA +0.08');quiz();saveGame()}
+function teach(){if(!spend(15))return;st.S=clamp(st.S+6);st.D=clamp(st.D+2);st.gpa=Math.min(4,st.gpa+.06);log('Buổi tập giảng tiến bộ. S +6, D +2');saveGame()}
+function rest(){st.E=clamp(st.E+28);log('Bạn nghỉ ngơi. E +28');saveGame()}
+function quiz(){
+let q=quizBank[(st.quizIndex++)%quizBank.length];showQuestion(`<h2>📚 Câu hỏi Ngữ văn</h2><p><b>${q[0]}</b></p>`+q[1].map((a,i)=>`<button class="btn choice" onclick="quizAns(${i},${q[2]},${q[3]})">${String.fromCharCode(65+i)}. ${a}</button>`).join(''));
+}
+function quizAns(i,correct,reward){closeQuestion();if(i===correct){st.C=clamp(st.C+reward);st.gpa=Math.min(4,st.gpa+.12);st.quests.q1=(st.quests.q1||0)+1;log('✅ Đúng! C +'+reward+', GPA +0.12')}else{st.C=clamp(st.C-2);log('❌ Chưa đúng. C -2')}saveGame();update()}
+function advanceSemester(){
+if(st.semester<6){st.semester++;st.E=clamp(st.E+20);st.C=clamp(st.C+3);log('➡️ Bước sang học kỳ '+st.semester+'. Học phần mới đã mở.');saveGame()}
+else if(st.semester===6){st.semester=7;st.week=0;st.quests.q4=0;log('🏫 Bạn bắt đầu kỳ THỰC TẬP SƯ PHẠM 12 TUẦN!');saveGame()}
+else if(st.semester===7){if(st.week<12){log('Hãy hoàn thành đủ 12 tuần thực tập trước khi sang học kỳ 8.')}else{st.semester=8;log('🎓 Hoàn thành thực tập. Bước vào giai đoạn tốt nghiệp.');saveGame()}}
+else {thesis()}
+}
+function internWeek(){
+if(st.semester!==7)return;
+if(st.week>=12){log('Bạn đã đủ 12 tuần. Hãy về gặp Thầy Hùng.');return}
+if(!spend(10))return;
+let w=st.week+1;
+showQuestion(`<h2>🏫 Thực tập — Tuần ${w}/12</h2><p>Chọn nhiệm vụ trọng tâm của tuần.</p>
+<button class="btn choice" onclick="internAnswer(1)">Soạn giáo án, dạy thử và nhận phản hồi</button>
+<button class="btn choice" onclick="internAnswer(2)">Chỉ quan sát rồi không ghi chép</button>
+<button class="btn choice" onclick="internAnswer(3)">Bỏ tiết để làm việc riêng</button>`);
+}
+function internAnswer(n){closeQuestion();st.week++;if(n===1){st.S=clamp(st.S+4);st.D=clamp(st.D+3);st.C=clamp(st.C+1);st.gpa=Math.min(4,st.gpa+.05);log('Tuần '+st.week+': thực tập hiệu quả. S +4, D +3')}else if(n===2){st.S=clamp(st.S-1);log('Tuần '+st.week+': bạn thiếu chủ động. S -1')}else{st.S=clamp(st.S-5);st.D=clamp(st.D-8);log('Tuần '+st.week+': vi phạm trách nhiệm nghề nghiệp. S -5, D -8')}st.quests.q4=st.week;saveGame();update()}
+function thesis(){
+if(st.semester!==8)return;
+showQuestion(`<h2>🎓 Bảo vệ khóa luận</h2><p>Hội đồng hỏi: <b>“Bạn sẽ thiết kế một giờ đọc hiểu văn bản như thế nào?”</b></p>
+<button class="btn choice" onclick="thesisAns(1)">Đặt câu hỏi gợi mở, cho học sinh khám phá văn bản, thảo luận và vận dụng</button>
+<button class="btn choice" onclick="thesisAns(2)">Giáo viên đọc đáp án, học sinh chép</button>
+<button class="btn choice" onclick="thesisAns(3)">Chỉ kiểm tra học thuộc lòng</button>`);
+}
+function thesisAns(n){closeQuestion();if(n===1){st.C=clamp(st.C+8);st.S=clamp(st.S+10);st.D=clamp(st.D+5);st.gpa=Math.min(4,st.gpa+.3);st.quests.q5=1;log('🏆 Hội đồng đánh giá cao câu trả lời.')}else{st.gpa=Math.max(0,st.gpa-.2);log('Hội đồng yêu cầu bạn suy nghĩ lại về vai trò của người học.')}saveGame();graduation()}
+function graduation(){
+if(st.quests.q5){setTimeout(()=>showDialog(`<h2>🎓 LỄ TỐT NGHIỆP</h2><p>GPA: <b>${st.gpa.toFixed(2)}/4.00</b></p><p>Chuyên môn: ${Math.round(st.C)} • Sư phạm: ${Math.round(st.S)} • Đạo đức: ${Math.round(st.D)}</p><p class="ok">Chúc mừng! Bạn đã hoàn thành Hành Trình Phấn Trắng và nhận bằng Cử nhân Sư phạm Ngữ văn.</p><button class="btn" onclick="closeDialog()">Nhận bằng 🎓</button>`),300)}
+}
+function showDialog(x){$('dialogCard').innerHTML=x;$('dialog').style.display='flex'}function closeDialog(){$('dialog').style.display='none'}
+function showQuestion(x){$('questionCard').innerHTML=x;$('question').style.display='flex'}function closeQuestion(){$('question').style.display='none'}
+function openMap(){showDialog(`<h2>🗺️ Bản đồ học tập</h2><p>📚 <b>Thư viện</b> — học Văn, làm câu hỏi.</p><p>🏛️ <b>Khoa Ngữ văn</b> — gặp giảng viên, trao đổi chuyên môn.</p><p>🎤 <b>Giảng đường</b> — tập giảng.</p><p>🏫 <b>Khu thực tập</b> — 12 tuần thực tập.</p><p>☕ <b>Sân trường</b> — hồi phục năng lượng.</p><button class="btn" onclick="closeDialog();advanceSemester()">➡️ Chuyển giai đoạn</button>`)}
+addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true;if(e.key.toLowerCase()==='e'&&started&&!$('dialog').style.display&&!$('question').style.display)interact()});
+addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+function animate(){requestAnimationFrame(animate);let dt=Math.min(clock.getDelta(),.05);if(started&&player&&!$('dialog').style.display&&!$('question').style.display){let dx=(keys.d||keys.arrowright?1:0)-(keys.a||keys.arrowleft?1:0),dz=(keys.s||keys.arrowdown?1:0)-(keys.w||keys.arrowup?1:0);let l=Math.hypot(dx,dz)||1;player.position.x+=dx/l*dt*7;player.position.z+=dz/l*dt*7;player.position.x=clamp(player.position.x,-52,52);player.position.z=clamp(player.position.z,-52,52);camera.position.x+=(player.position.x-camera.position.x)*dt*4;camera.position.z+=(player.position.z+15-camera.position.z)*dt*4;camera.lookAt(player.position.x,1.2,player.position.z)}renderer.render(scene,camera)}
+addEventListener('resize',()=>{if(camera){camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)}})
+</script>
+</body></html>
